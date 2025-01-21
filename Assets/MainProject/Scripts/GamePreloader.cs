@@ -4,39 +4,36 @@ using UnityEngine;
 using Zenject;
 using TMPro;
 using System;
+using UnityEngine.SceneManagement;
 
 public class GamePreloader : MonoBehaviour
 {
-    [SerializeField] private ProgressBar progressBar;
     [SerializeField] private Logger logger;
     [Inject] private FilesLoader filesLoader;
+    [Inject] private PopUps popUps;
     void Start()
     {
+        popUps.ShowProgressOverlay();
+        filesLoader.onFilesLoaded += ChangeScene;
         filesLoader.StartLoading();
     }
+
+    private void ChangeScene()
+    {
+        SceneManager.LoadScene("Game");
+    }
+
     private void OnEnable()
     {
-        filesLoader.onProgressChanged += UpdateProgressBar;
         filesLoader.onLogMessage += UpdateLogText;
     }
     private void OnDisable()
     {
-        filesLoader.onProgressChanged -= UpdateProgressBar;
         filesLoader.onLogMessage -= UpdateLogText;
     }
 
     private void UpdateLogText(string logMessage)
     {
         logger.LogMessage(logMessage);
-    }
-
-    private void UpdateProgressBar(float currentProgress)
-    {
-        progressBar.UpdateProgressBar(currentProgress);
-    }
-    // Update is called once per frame
-    void Update()
-    {
-        
     }
 }

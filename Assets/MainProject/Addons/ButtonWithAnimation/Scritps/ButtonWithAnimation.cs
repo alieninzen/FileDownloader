@@ -1,4 +1,3 @@
-using UnityEditor.Animations;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -25,7 +24,7 @@ public class ButtonWithAnimation : MonoBehaviour
         }
         button = GetComponent<Button>();
         button.onClick.AddListener(OnButtonClick);
-        AnimatorController animatorController = UnityEngine.Resources.Load<AnimatorController>("animations/Button");
+        var animatorController = UnityEngine.Resources.Load<RuntimeAnimatorController>("animations/Button");
         animator.runtimeAnimatorController = animatorController;
         if (withIdle)
         {

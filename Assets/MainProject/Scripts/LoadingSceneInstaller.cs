@@ -14,7 +14,29 @@ public class LoadingSceneInstaller : MonoInstaller
         }
         else
         {
-            Debug.LogError("FilesLoader not found in the scene!");
+            Debug.LogWarning("FilesLoader not found in the scene!");
         }
+        var coroutineRunner = FindObjectOfType<CoroutineRunner>();
+
+        if (coroutineRunner != null)
+        {
+            Container.Bind<CoroutineRunner>().FromInstance(coroutineRunner).AsSingle();
+        }
+        else
+        {
+            Debug.LogWarning("CoroutineRunner not found in the scene!");
+        }
+        var assetBunldeManager = FindObjectOfType<AssetBundleManager>();
+        if (assetBunldeManager != null)
+        {
+            Container.Bind<AssetBundleManager>().FromInstance(assetBunldeManager).AsSingle();
+        }
+        else
+        {
+            Debug.LogWarning("Asset bunle manager not found in the scene!");
+        }
+        Container.Bind<PopUps>().AsSingle();
+     
+        
     }
 }

@@ -12,8 +12,10 @@ public class FilesLoader : MonoBehaviour
     public class FileData
     {
         public string Name;
+        public string Path;
         public int Size;
         public string download_url;
+        public string type; // "file" or "dir"
     }
 
     private FilesLoader instance;
@@ -24,13 +26,15 @@ public class FilesLoader : MonoBehaviour
 
     private string localDirectory;
 
-    private string apiURL = "https://api.github.com/repos/" + GlobalConstants.ServerRootPath;
+    private string apiURL = "https://api.github.com/repos/" + GlobalConstants.ServerPath;
+    private string rootFolder = "Test";
     [SerializeField] private bool logEnabled;
+
     public UnityAction<float> onProgressChanged;
     public UnityAction<string> onLogMessage;
+    public UnityAction onFilesLoaded;
     private void Awake()
     {
-        // Singleton initialization
         if (instance != null && instance != this)
         {
             Destroy(gameObject);
@@ -38,66 +42,74 @@ public class FilesLoader : MonoBehaviour
         }
 
         instance = this;
-        DontDestroyOnLoad(gameObject); // Сохраняем объект между сценами
+        DontDestroyOnLoad(gameObject);
     }
-
 
     public void StartLoading()
     {
-        // Определяем путь для сохранения файлов
         localDirectory = Path.Combine(Application.persistentDataPath, "DownloadedFiles");
 
-        // Создаем директорию, если её нет
         if (!Directory.Exists(localDirectory))
         {
             Directory.CreateDirectory(localDirectory);
         }
 
-        StartCoroutine(LoadFilesList());
+        StartCoroutine(LoadFilesList(apiURL+rootFolder, localDirectory));
     }
 
-    private IEnumerator LoadFilesList()
+    private IEnumerator LoadFilesList(string url, string currentDirectory)
     {
-        using (UnityWebRequest request = UnityWebRequest.Get(apiURL))
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
             request.SetRequestHeader("User-Agent", "UnityApp");
             yield return request.SendWebRequest();
-
+           
             if (request.result == UnityWebRequest.Result.Success)
             {
-                // Парсим JSON
                 var jsonResponse = request.downloadHandler.text;
                 var files = JsonConvert.DeserializeObject<List<FileData>>(jsonResponse);
 
-                // Добавляем файлы в список и рассчитываем общий размер
-                filesList.Clear();
-                totalSize = 0;
                 foreach (var file in files)
                 {
-                    filesList.Add(file);
-                    totalSize += file.Size;
+                    if (file.type == "file")
+                    {
+                        filesList.Add(file);
+                        totalSize += file.Size;
+                    }
+                    else if (file.type == "dir")
+                    {
+                        string newLocalDirectory = Path.Combine(currentDirectory, file.Path);
+                        if (!Directory.Exists(newLocalDirectory))
+                        {
+                            Directory.CreateDirectory(newLocalDirectory);
+                        }
+                       
+
+                        yield return StartCoroutine(LoadFilesList(apiURL+file.Path, newLocalDirectory));
+                    }
                 }
 
-                LogMessage($"Loaded {filesList.Count} files, total size: {totalSize} bytes");
-
-                // Запускаем загрузку файлов с прогрессом
-                StartCoroutine(DownloadFilesWithProgress());
+                if (currentDirectory == localDirectory) // Запускаем загрузку только в самом начале
+                {
+                    LogMessage($"Loaded {filesList.Count} files, total size: {totalSize} bytes");
+                    StartCoroutine(DownloadFilesWithProgress());
+                }
             }
             else
             {
-                LogMessage($"Failed to load directory: {request.error}",true);
+                LogMessage($"Failed to load directory: {request.error}", true);
             }
         }
     }
 
     private IEnumerator DownloadFilesWithProgress()
     {
-        downloadedSize = 0; // Сбрасываем прогресс
+        downloadedSize = 0;
+
         foreach (var file in filesList)
         {
-            string localFilePath = Path.Combine(localDirectory, file.Name);
+            string localFilePath = Path.Combine(localDirectory, file.Path);
 
-            // Проверяем, существует ли файл локально
             if (File.Exists(localFilePath))
             {
                 LogMessage($"File already exists locally: {file.Name}");
@@ -109,7 +121,7 @@ public class FilesLoader : MonoBehaviour
                 yield return StartCoroutine(DownloadFile(file, localFilePath));
             }
         }
-
+        onFilesLoaded?.Invoke();
         LogMessage("All files downloaded successfully!");
     }
 
@@ -119,7 +131,6 @@ public class FilesLoader : MonoBehaviour
         {
             request.SendWebRequest();
 
-            // Показываем прогресс загрузки файла
             while (!request.isDone)
             {
                 float fileProgress = request.downloadProgress * file.Size;
@@ -131,43 +142,64 @@ public class FilesLoader : MonoBehaviour
             {
                 LogMessage($"File downloaded: {file.Name}");
                 downloadedSize += file.Size;
-
-                // Сохраняем файл локально
                 File.WriteAllBytes(localFilePath, request.downloadHandler.data);
-
                 ShowProgress(downloadedSize, totalSize);
             }
             else
             {
-                LogMessage($"Failed to download file {file.Name}: {request.error}",true);
+                LogMessage($"Failed to download file {file.Name}: {request.error}", true);
             }
         }
     }
 
-    public void ForceUpdate()
+    public byte[] GetFileContents(string fileName)
     {
-        LogMessage("Starting force update...");
-
-        StartCoroutine(ForceUpdateFiles());
-    }
-
-    private IEnumerator ForceUpdateFiles()
-    {
-        downloadedSize = 0; // Сбрасываем прогресс
-        foreach (var file in filesList)
+        // Ищем файл в списке загруженных
+        var file = filesList.Find(f => f.Name == fileName);
+        if (file == null)
         {
-            string localFilePath = Path.Combine(localDirectory, file.Name);
-
-            // Перезаписываем файл
-            LogMessage($"Forcing update for file: {file.Name}");
-            yield return StartCoroutine(DownloadFile(file, localFilePath));
+            LogMessage($"Файл с именем {fileName} не найден", true);
+            return null;
         }
 
-        LogMessage("Force update completed. All files have been updated.");
+        // Локальный путь к файлу
+        string localFilePath = Path.Combine(localDirectory, file.Path);
+
+        // Проверяем, существует ли файл
+        if (!File.Exists(localFilePath))
+        {
+            LogMessage($"Файл {fileName} отсутствует в локальной директории: {localFilePath}", true);
+            return null;
+        }
+
+        // Читаем содержимое файла
+        return File.ReadAllBytes(localFilePath);
     }
-    private void LogMessage(string message,bool isError=false)
+
+    public AssetBundle LoadAssetBundle(string fileName)
+    {
+        byte[] fileContents = GetFileContents(fileName);
+        if (fileContents == null)
+        {
+            LogMessage($"Не удалось загрузить AssetBundle: содержимое файла {fileName} не найдено", true);
+            return null;
+        }
+
+        // Загружаем AssetBundle из массива байт
+        AssetBundle assetBundle = AssetBundle.LoadFromMemory(fileContents);
+
+        if (assetBundle == null)
+        {
+            LogMessage($"Ошибка загрузки AssetBundle из файла {fileName}", true);
+        }
+
+        return assetBundle;
+    }
+
+    private void LogMessage(string message, bool isError = false)
     {
         if (!logEnabled) return;
+
         if (isError)
         {
             Debug.LogError(message);
@@ -176,11 +208,15 @@ public class FilesLoader : MonoBehaviour
         {
             Debug.Log(message);
         }
+
         onLogMessage?.Invoke(message);
     }
+
     private void ShowProgress(int current, int total)
     {
         float progress = (float)current / total;
         onProgressChanged?.Invoke(progress);
     }
+
+
 }

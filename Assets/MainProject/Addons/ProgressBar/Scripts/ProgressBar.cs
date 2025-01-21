@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using DG.Tweening;
+using UnityEngine.Events;
 
 public class ProgressBar : MonoBehaviour
 {
@@ -12,15 +13,19 @@ public class ProgressBar : MonoBehaviour
     private float maxWidth;
     private float currentProgress = 0;
     private float smoothTime = 1f;
+    private bool isLoaded = false; // Флаг для предотвращения повторного вызова onLoaded
+    public UnityAction onLoaded;
 
-    private void Awake()
+    private void OnEnable()
     {
         Init();
     }
+
     private void Init()
     {
         maxWidth = fullImage.rect.width;
         currentProgress = 0;
+        isLoaded = false; // Сбрасываем флаг при инициализации
         UpdateProgressBar(0);
     }
 
@@ -28,18 +33,24 @@ public class ProgressBar : MonoBehaviour
     {
         if (progressText == null) return;
         progressText.text = (progress * 100).ToString("0") + "%";
+
+        // Проверяем, достиг ли прогресс 100% и не вызывался ли onLoaded ранее
+        if (progress >= 1 && !isLoaded)
+        {
+            isLoaded = true; // Устанавливаем флаг
+            onLoaded?.Invoke(); // Вызываем onLoaded только один раз
+        }
     }
 
     public void UpdateProgressBar(float targetProgress)
     {
-       
         maxWidth = fullImage.rect.width;
 
         if (targetProgress > 1f) targetProgress = 1f;
         if (targetProgress < 0f) targetProgress = 0f;
 
         // Анимируем изменение прогресса
-        DOTween.To(() => currentProgress, x => currentProgress = x, targetProgress, smoothTime) // 0.5f - длительность анимации
+        DOTween.To(() => currentProgress, x => currentProgress = x, targetProgress, smoothTime)
             .OnUpdate(() =>
             {
                 // Обновляем размер fillImage по мере анимации

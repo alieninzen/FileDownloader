@@ -2,19 +2,25 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using DG.Tweening;
+//using DG.Tweening;
+using UnityEngine.Events;
 
 public class Fader
 {
-    private Color backgroundColor = new Color(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 0.6f);
+    private Color backgroundColor = new Color(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 0.7f);
     private GameObject m_background;
+    public UnityAction faderHided;
     public GameObject FaderObj
     {
         get { return m_background; }
     }
-    public void Show()
+    public void SetFaderColor(Color color)
     {
-        var canvas = GameObject.FindGameObjectWithTag("popUpCanvas").GetComponent<Canvas>();
+        backgroundColor = color;
+    }
+    public void Show(bool overlay = false)
+    {
+        var canvas = GameObject.FindGameObjectWithTag("overlayCanvas").GetComponent<Canvas>();
         if (canvas == null)
         {
             Debug.Log("please add tag  <popUpCanvas> to canvas ");
@@ -25,7 +31,7 @@ public class Fader
 
         m_background = new GameObject("PopupBackground");
         var image = m_background.AddComponent<Image>();
-        var rect = new Rect(0, 0, bgTex.width, bgTex.height);
+        var rect = new UnityEngine.Rect(0, 0, bgTex.width, bgTex.height);
         var sprite = Sprite.Create(bgTex, rect, new Vector2(0.5f, 0.5f), 1);
         image.material.mainTexture = bgTex;
         image.sprite = sprite;
@@ -42,7 +48,7 @@ public class Fader
     public void Hide()
     {
         m_background.GetComponent<Image>().raycastTarget = false;
-        m_background.GetComponent<Image>().DOFade(0, 0.5f);
+        m_background.GetComponent<Image>().CrossFadeAlpha(0, 0.5f, false);
     }
 
 }

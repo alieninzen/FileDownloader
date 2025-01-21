@@ -8,6 +8,6 @@ public enum Scenes
 }
 public static class GlobalConstants
 {
-    public const string ServerRootPath = "alieninzen/goblins/contents/Test"; 
+    public const string ServerPath = "alieninzen/goblins/contents/"; 
 }
 
