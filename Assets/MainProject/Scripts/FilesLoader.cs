@@ -5,7 +5,7 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.Networking;
-
+using Zenject;
 public class FilesLoader : MonoBehaviour
 {
     [System.Serializable]
@@ -33,8 +33,22 @@ public class FilesLoader : MonoBehaviour
     public UnityAction<string> onLogMessage;
     public UnityAction onFilesLoaded;
 
+    private FilesLoader instance;
+    [Inject] private PopUps popUps;
+    private void Awake()
+    {
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject); // Удаляем дублирующий объект
+            return;
+        }
+
+        instance = this;
+        DontDestroyOnLoad(gameObject); // Сохраняем объект
+    }
     public void StartLoading()
     {
+        popUps.ShowProgressOverlay();
         localDirectory = Path.Combine(Application.persistentDataPath, "DownloadedFiles");
         metadataFilePath = Path.Combine(localDirectory, "files_metadata.json");
 
@@ -241,7 +255,7 @@ public class FilesLoader : MonoBehaviour
 
         // Convert bytes to string
         string jsonString = System.Text.Encoding.UTF8.GetString(fileContents);
-
+      
         try
         {
             // Deserialize JSON to an object of type T
@@ -274,5 +288,22 @@ public class FilesLoader : MonoBehaviour
         }
 
         return assetBundle;
+    }
+
+    public void ForceUpdate()
+    {
+        LogMessage("Starting forced update...");
+        
+        // Удаляем локальные файлы и метаданные
+        if (Directory.Exists(localDirectory))
+        {
+            Directory.Delete(localDirectory, true);
+            LogMessage("Local files and metadata deleted.");
+        }
+
+        // Создаем заново локальную директорию
+        Directory.CreateDirectory(localDirectory);
+
+        StartLoading();
     }
 }

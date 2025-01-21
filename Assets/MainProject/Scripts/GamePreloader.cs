@@ -10,14 +10,13 @@ public class GamePreloader : MonoBehaviour
 {
     [SerializeField] private Logger logger;
     [Inject] private FilesLoader filesLoader;
-    [Inject] private PopUps popUps;
+  
     void Start()
     {
-        popUps.ShowProgressOverlay();
-        filesLoader.onFilesLoaded += ChangeScene;
+      
         filesLoader.StartLoading();
     }
-
+   
     private void ChangeScene()
     {
         SceneManager.LoadScene("Game");
@@ -26,10 +25,12 @@ public class GamePreloader : MonoBehaviour
     private void OnEnable()
     {
         filesLoader.onLogMessage += UpdateLogText;
+        filesLoader.onFilesLoaded += ChangeScene;
     }
     private void OnDisable()
     {
         filesLoader.onLogMessage -= UpdateLogText;
+        filesLoader.onFilesLoaded -= ChangeScene;
     }
 
     private void UpdateLogText(string logMessage)

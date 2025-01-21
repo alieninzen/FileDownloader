@@ -8,6 +8,7 @@ public class ProjectInstaller : MonoInstaller
     {
       
         Container.Bind<FilesLoader>().FromInstance(FindObjectOfType<FilesLoader>()).AsSingle();
+        Container.Bind<PlayerDataManager>().AsSingle();
         Container.Bind<CoroutineRunner>().FromComponentInHierarchy().AsSingle();
         Container.Bind<PopUps>().AsSingle();
         Container.Bind<AssetBundleManager>().AsSingle();
