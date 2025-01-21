@@ -8,7 +8,6 @@ public class BgChanger : MonoBehaviour
     [SerializeField] private BgFit bgFit;
     void Start()
     {
-      
         LoadSprite();
     }
 

@@ -18,13 +18,12 @@ public class FilesLoader : MonoBehaviour
         public string type; // "file" or "dir"
     }
 
-    private FilesLoader instance;
-
     private List<FileData> filesList = new List<FileData>();
     private int totalSize = 0;
     private int downloadedSize = 0;
 
     private string localDirectory;
+    private string metadataFilePath;
 
     private string apiURL = "https://api.github.com/repos/" + GlobalConstants.ServerPath;
     private string rootFolder = "Test";
@@ -33,40 +32,48 @@ public class FilesLoader : MonoBehaviour
     public UnityAction<float> onProgressChanged;
     public UnityAction<string> onLogMessage;
     public UnityAction onFilesLoaded;
-    private void Awake()
-    {
-        if (instance != null && instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
-        instance = this;
-        DontDestroyOnLoad(gameObject);
-    }
 
     public void StartLoading()
     {
         localDirectory = Path.Combine(Application.persistentDataPath, "DownloadedFiles");
+        metadataFilePath = Path.Combine(localDirectory, "files_metadata.json");
 
         if (!Directory.Exists(localDirectory))
         {
             Directory.CreateDirectory(localDirectory);
         }
 
-        StartCoroutine(LoadFilesList(apiURL+rootFolder, localDirectory));
+        if (File.Exists(metadataFilePath))
+        {
+            LogMessage("Using local metadata.");
+            LoadLocalMetadata();
+            StartCoroutine(DownloadFilesWithProgress());
+        }
+        else
+        {
+            LogMessage("Downloading metadata from server...");
+            StartCoroutine(LoadFilesList(apiURL + rootFolder, localDirectory));
+        }
+    }
+
+    private void LoadLocalMetadata()
+    {
+        string json = File.ReadAllText(metadataFilePath);
+        filesList = JsonConvert.DeserializeObject<List<FileData>>(json);
+        totalSize = CalculateTotalSize();
     }
 
     private IEnumerator LoadFilesList(string url, string currentDirectory)
     {
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
+            LogMessage($"Loading: {url}");
             request.SetRequestHeader("User-Agent", "UnityApp");
             yield return request.SendWebRequest();
-           
+
             if (request.result == UnityWebRequest.Result.Success)
             {
-                var jsonResponse = request.downloadHandler.text;
+                string jsonResponse = request.downloadHandler.text;
                 var files = JsonConvert.DeserializeObject<List<FileData>>(jsonResponse);
 
                 foreach (var file in files)
@@ -83,15 +90,14 @@ public class FilesLoader : MonoBehaviour
                         {
                             Directory.CreateDirectory(newLocalDirectory);
                         }
-                       
-
-                        yield return StartCoroutine(LoadFilesList(apiURL+file.Path, newLocalDirectory));
+                        yield return StartCoroutine(LoadFilesList(apiURL + file.Path, newLocalDirectory));
                     }
                 }
 
-                if (currentDirectory == localDirectory) // Запускаем загрузку только в самом начале
+                if (currentDirectory == localDirectory)
                 {
-                    LogMessage($"Loaded {filesList.Count} files, total size: {totalSize} bytes");
+                    SaveDownloadedFilesInfo();
+                    LogMessage("Metadata downloaded and saved locally.");
                     StartCoroutine(DownloadFilesWithProgress());
                 }
             }
@@ -110,9 +116,9 @@ public class FilesLoader : MonoBehaviour
         {
             string localFilePath = Path.Combine(localDirectory, file.Path);
 
-            if (File.Exists(localFilePath))
+            if (IsFileUpToDate(file, localFilePath))
             {
-                LogMessage($"File already exists locally: {file.Name}");
+                LogMessage($"File is up to date: {file.Name}");
                 downloadedSize += file.Size;
                 ShowProgress(downloadedSize, totalSize);
             }
@@ -121,8 +127,17 @@ public class FilesLoader : MonoBehaviour
                 yield return StartCoroutine(DownloadFile(file, localFilePath));
             }
         }
-        onFilesLoaded?.Invoke();
+
         LogMessage("All files downloaded successfully!");
+        onFilesLoaded?.Invoke();
+    }
+
+    private bool IsFileUpToDate(FileData file, string localFilePath)
+    {
+        if (!File.Exists(localFilePath)) return false;
+
+        FileInfo fileInfo = new FileInfo(localFilePath);
+        return fileInfo.Length == file.Size;
     }
 
     private IEnumerator DownloadFile(FileData file, string localFilePath)
@@ -140,9 +155,9 @@ public class FilesLoader : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
+                File.WriteAllBytes(localFilePath, request.downloadHandler.data);
                 LogMessage($"File downloaded: {file.Name}");
                 downloadedSize += file.Size;
-                File.WriteAllBytes(localFilePath, request.downloadHandler.data);
                 ShowProgress(downloadedSize, totalSize);
             }
             else
@@ -152,48 +167,21 @@ public class FilesLoader : MonoBehaviour
         }
     }
 
-    public byte[] GetFileContents(string fileName)
+    private void SaveDownloadedFilesInfo()
     {
-        // Ищем файл в списке загруженных
-        var file = filesList.Find(f => f.Name == fileName);
-        if (file == null)
-        {
-            LogMessage($"Файл с именем {fileName} не найден", true);
-            return null;
-        }
-
-        // Локальный путь к файлу
-        string localFilePath = Path.Combine(localDirectory, file.Path);
-
-        // Проверяем, существует ли файл
-        if (!File.Exists(localFilePath))
-        {
-            LogMessage($"Файл {fileName} отсутствует в локальной директории: {localFilePath}", true);
-            return null;
-        }
-
-        // Читаем содержимое файла
-        return File.ReadAllBytes(localFilePath);
+        string json = JsonConvert.SerializeObject(filesList, Formatting.Indented);
+        File.WriteAllText(metadataFilePath, json);
+        LogMessage("Saved metadata locally.");
     }
 
-    public AssetBundle LoadAssetBundle(string fileName)
+    private int CalculateTotalSize()
     {
-        byte[] fileContents = GetFileContents(fileName);
-        if (fileContents == null)
+        int size = 0;
+        foreach (var file in filesList)
         {
-            LogMessage($"Не удалось загрузить AssetBundle: содержимое файла {fileName} не найдено", true);
-            return null;
+            size += file.Size;
         }
-
-        // Загружаем AssetBundle из массива байт
-        AssetBundle assetBundle = AssetBundle.LoadFromMemory(fileContents);
-
-        if (assetBundle == null)
-        {
-            LogMessage($"Ошибка загрузки AssetBundle из файла {fileName}", true);
-        }
-
-        return assetBundle;
+        return size;
     }
 
     private void LogMessage(string message, bool isError = false)
@@ -217,6 +205,74 @@ public class FilesLoader : MonoBehaviour
         float progress = (float)current / total;
         onProgressChanged?.Invoke(progress);
     }
+    public byte[] GetFileContents(string fileName)
+    {
+        // Find the file in the loaded list
+        var file = filesList.Find(f => f.Name == fileName);
+        if (file == null)
+        {
+            LogMessage($"File with name {fileName} not found", true);
+            return null;
+        }
 
+        // Local path to the file
+        string localFilePath = Path.Combine(localDirectory, file.Path);
 
+        // Check if the file exists
+        if (!File.Exists(localFilePath))
+        {
+            LogMessage($"File {fileName} is missing in the local directory: {localFilePath}", true);
+            return null;
+        }
+
+        // Read the file content
+        return File.ReadAllBytes(localFilePath);
+    }
+
+    public T GetJsonContents<T>(string fileName)
+    {
+        // Get the file content as a byte array
+        byte[] fileContents = GetFileContents(fileName);
+        if (fileContents == null)
+        {
+            LogMessage($"Failed to load JSON content from file {fileName}", true);
+            return default;
+        }
+
+        // Convert bytes to string
+        string jsonString = System.Text.Encoding.UTF8.GetString(fileContents);
+
+        try
+        {
+            // Deserialize JSON to an object of type T
+            T jsonData = JsonConvert.DeserializeObject<T>(jsonString);
+
+            return jsonData;
+        }
+        catch (JsonException ex)
+        {
+            LogMessage($"Error during JSON deserialization: {ex.Message}", true);
+            return default;
+        }
+    }
+
+    public AssetBundle LoadAssetBundle(string fileName)
+    {
+        byte[] fileContents = GetFileContents(fileName);
+        if (fileContents == null)
+        {
+            LogMessage($"Failed to load AssetBundle: file content {fileName} not found", true);
+            return null;
+        }
+
+        // Load AssetBundle from byte array
+        AssetBundle assetBundle = AssetBundle.LoadFromMemory(fileContents);
+
+        if (assetBundle == null)
+        {
+            LogMessage($"Error loading AssetBundle from file {fileName}", true);
+        }
+
+        return assetBundle;
+    }
 }

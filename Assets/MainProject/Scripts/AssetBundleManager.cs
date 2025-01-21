@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using Zenject;
 
-public class AssetBundleManager:MonoBehaviour
+public class AssetBundleManager
 {
     [Inject] private FilesLoader filesLoader;
 
