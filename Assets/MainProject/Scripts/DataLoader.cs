@@ -11,13 +11,19 @@ public class DataLoader : MonoBehaviour
     [Inject] private PlayerDataManager playerManager;
     [Inject] private AssetBundleManager assetBundleManager;
     [SerializeField] private TextMeshProUGUI counterText;
+    [SerializeField] private TextMeshProUGUI welcomeMessageText;
     private int currentNumber {
         set { counterText.text = value.ToString(); }
     }
     // Start is called before the first frame update
     void Start()
     {
-        playerManager.Load();
+        playerManager.Load(ShowGreetings);
+    }
+    private void ShowGreetings()
+    {
+        var welcomeMessages = filesLoader.GetJsonContents<WelcomeMessages>(GlobalConstants.WelcomeMessagesFileName).greetings;
+        welcomeMessageText.text = welcomeMessages[UnityEngine.Random.Range(0, welcomeMessages.Length)];
     }
     private void OnEnable()
     {
